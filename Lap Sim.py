@@ -5,6 +5,7 @@ from math import sqrt, pi
 # - Change Euler integration to RK4
 # - Add power curve, gears
 
+# Some general methods used in the Car class and in setting up testing
 def quadraticFormula(a,b,c):
     # Given coefficients of a quadratic, finds x-coordinates of the zeroes and returns them in a list.
     result = []
@@ -31,6 +32,7 @@ def readTrackFile(path):
         file.close()
         return track
 
+# The Car class. This is where all of the calculations are done. Instantiate a Car object and use Car.findDynamicTimes() to test it
 class Car:
     def __init__(self, name, m, P, mu, width, a_brake, df, drag):
         self.name = name # Just the name of the instance
@@ -154,17 +156,17 @@ class Car:
     def findDynamicTimes(self, p_bool, autox_track, endurance_track):
         # Calculates times in acceleration, skidpad, autocross, and endurance using car parameters and points data from Lincoln 2017
         times = []
-        times.append(self.findStraightTime(0, -1, 75))
-        times.append(self.findCorneringTime(8.12, 360))
-        times.append(self.findLapTime(autox_track, True))
-        times.append(self.findLapTime(endurance_track) * 16) # Endurance is 16 laps, so just multiply the time of one lap times 16
+        times.append(round(self.findStraightTime(0, -1, 75), 3))
+        times.append(round(self.findCorneringTime(8.12, 360), 3))
+        times.append(round(self.findLapTime(autox_track, True), 3))
+        times.append(round(self.findLapTime(endurance_track) * 16, 3)) # Endurance is 16 laps, so just multiply the time of one lap times 16
         if p_bool:
             print(self.name + ' dynamic event times: ')
             print('Accel: ' + str(times[0]) + '\tSkidpad: ' + str(times[1]) + '\tAutoX: ' + str(times[2]) + '\tEnduro: ' + str(times[3]) + '\n')
         return times
-
-
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~END CAR CLASS~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~VARIABLE SETUP~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 power = 23390 # Watts
 m_car = 234.0 # kg
@@ -187,27 +189,40 @@ endurance_track = readTrackFile("C:\\Users\\MMcMu\\OneDrive\\Documents\\_School\
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~TESTING~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Creating 2 car objects, one for the 2017 car, and one for the 2017 car with aero called Mantis18
-Mantis17 = Car('Mantis 17', m_car + m_driver, power, mu_s, width_car, a_brake17, df17, drag17)
-Mantis18 = Car('Mantis 18', m_car + m_driver + m_aeroPackage, power, mu_s, width_car, a_brake18, df18, drag18)
+# Mantis17 is the old car
+# Mantis18 is the old car + aero. 
+# Mantis18a is Mantis18 - 16 kg (so we are average weight w/o aero), + 2147 W from new exhaust
+Mantis17 = Car("Mantis 17", m_car+m_driver, power, mu_s, width_car, a_brake17, df17, drag17)
+Mantis18 = Car("Mantis 18", m_car+m_driver+m_aeroPackage, power, mu_s, width_car, a_brake18, df18, drag18)
+Mantis18a = Car("Mantis 18a", m_car+m_driver+m_aeroPackage-16, power+2147, mu_s, width_car, a_brake18, df18, drag18)
 
-# Finding dynamic event times for both cars
+# Finding dynamic event times for all of the cars
 m17 = Mantis17.findDynamicTimes(True, autox_track, endurance_track)
 m18 = Mantis18.findDynamicTimes(True, autox_track, endurance_track)
+m18a = Mantis18a.findDynamicTimes(True, autox_track, endurance_track)
 
-# Some variables for finding how accurate the simulation is
-model_accuracy = 0
-irl_times = [4.452, 5.252, 57.268, 1485.083]
 events = ['acceleration', 'skidpad', 'autocross', 'endurance']
 
-# Printing the differences between the '17 and '18 cars' times, as well as the accuracy of the model compared to Lincoln 2017 times
+# Print differences between 2017 and 2018 cars
 for event in range(len(m17)):
     diff = m17[event]-m18[event]
     percent = diff/m17[event]*100
-    print(str(percent)[:4] + '% difference from 2017 to 2018 in ' + events[event])
-    print(str(abs((irl_times[event]-m17[event])/m17[event]*100))[:4] + '% difference from irl to model in ' + events[event] + '\n')
+    print(str(round(percent,2)) + '% difference from 2017 to 2018 in ' + events[event])
+print()
+
+# Print differences between 2017 and 2018a cars
+for event in range(len(m17)):
+    diff = m17[event]-m18a[event]
+    percent = diff/m17[event]*100
+    print(str(round(percent,2)) + '% difference from 2017 to 2018a in ' + events[event])
     
-    model_accuracy += abs((irl_times[event]-m17[event])/m17[event]*100)
+# Calculating the accuracy of the model
+model_accuracy = 0
+irl_times = [4.452, 5.252, 57.268, 1485.083]
+for event in range(len(m17)):
+    print(str(round(abs((m17[event]-irl_times[event])/irl_times[event]*100),2)) + '% difference from irl to model in ' + events[event] + '\n')
+    
+    model_accuracy += abs((m17[event]-irl_times[event])/m17[event]*100)
 
 model_accuracy /= 4
 print('\nModel is ' + str(model_accuracy)[:4] + '% inaccurate on average across the four events')   
