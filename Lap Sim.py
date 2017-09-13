@@ -2,7 +2,6 @@ from math import sqrt, pi
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~TO-DO~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # - Make braking more realistic using forces rather than constant acceleration
-# - Change Euler integration to RK4
 # - Add power curve, gears
 
 # Some general methods used in the Car class and in setting up testing
@@ -31,6 +30,93 @@ def readTrackFile(path):
             
         file.close()
         return track
+
+# The Drivetrain class is used to create drivetrain objects that are passed into the constructor for a Car object. Used for calculating power, torque, force, etc.
+class Drivetrain:
+	def __init__(self, power_curve, gear_ratios, crank_sprocket_ratio, tire_radius):
+		self.power_curve = power_curve # A list of length 2 lists that are points on the power curve
+		self.min_rpm = power_curve[0][0]
+		self.max_rpm = power_curve[len(power_curve)-1][0]
+		self.min_power = power_curve[0][1]
+		self.max_power = power_curve[len(power_curve)-1][1]
+		self.gear_ratios = gear_ratios
+		self.crank_sprocket_ratio = crank_sprocket_ratio
+		self.tire_radius = tire_radius
+		
+		for i in range(len(power_curve)-1):
+			rise = power_curve[i][1]-power_curve[i+1][1]
+			run = power_curve[i][0]-power_curve[i+1][0]
+			slope = rise/run
+			power_curve[i].append(slope) # The slope from point i to point i+1
+		
+		self.rpm = self.min_rpm
+		self.gear = 1
+	
+	def overrev(self):
+		if self.rpm > self.max_rpm:
+			return True
+		else:
+			return False
+	
+	def underrev(self):
+		if self.rpm < self.min_rpm:
+			return True
+		else:
+			return False
+	
+	def setRPM(self, velocity):
+	# Given velocity, find RPM based on gearing. Haven't been able to get this to put out realistic numbers
+		#self.rpm = self.crank_sprocket_ratio * self.gear_ratios[self.gear-1] * velocity * (60/(2*pi)) / self.tire_radius
+		#self.rpm = (velocity*self.gear_ratios[self.gear-1]*self.crank_sprocket_ratio)/(2*pi*self.tire_radius)*60 #shelquist
+		self.rpm = 60/2/pi*(velocity*self.gear_ratios[self.gear-1]*self.crank_sprocket_ratio)/self.tire_radius #crawlpedia
+		if self.rpm < self.min_rpm and self.gear == 1: # Don't let the engine 'stall'
+			self.rpm = self.min_rpm
+		
+		return self.rpm
+	
+	def selectGear(self, velocity):
+	# Given velocity, select the correct gear based on minimum and maximum rpms
+		self.setRPM(velocity)
+		while(self.overrev() or self.underrev()):
+			# Upshift if revs are too high and not in final gear
+			if self.overrev():
+				if self.gear != len(self.gear_ratios):
+					self.gear += 1
+				else:
+					#print("Redline in 6th!")
+					return self.gear
+			# Downshift if revs are too low and not in 1st gear		
+			elif self.underrev():
+				if self.gear != 1:
+					self.gear -= 1
+				else:
+					#print("Engine stalling in 1st!")
+					return self.gear
+			self.setRPM(velocity)
+					
+		print("Gear: " + str(self.gear))
+		return self.gear	
+	
+	def getPower(self):
+	# Returns power in Watts based on current rpm of the engine. Uses linear interpolation between points in power_curve
+	#!!! Doesn't give any power if less than min rpm !!!
+	#y=m(x-x1)+y1
+		power = 0
+		for i in range(len(self.power_curve)-1):
+			if self.rpm >= self.power_curve[i][0] and self.rpm < self.power_curve[i+1][0]:
+				power = self.power_curve[i][2] * (self.power_curve[i][0] - self.rpm) + self.power_curve[i][1]
+			
+		return power
+	
+	def getTorque(self):
+	# Finds torque in N*m from power at current rpm 
+		torque = self.getPower()/(self.rpm*((2*pi)/60))
+		return torque 
+	
+	def getWheelForce(self):
+	# Converts torque from the engine to force on the ground
+		force = self.getTorque() * self.gear_ratios[self.gear-1] * self.crank_sprocket_ratio / self.tire_radius
+		return force 
 
 # The Car class. This is where all of the calculations are done. Instantiate a Car object and use Car.findDynamicTimes() to test it
 class Car:
@@ -95,20 +181,40 @@ class Car:
     def findStraightTime(self, v_i, v_f, length):
         # Figures out how long it takes to go a specified distance starting and ending at specified speeds using numerical integration
         t = 0
-        d = 0
-        d_prev = 0
-        v = v_i
-        ke = 0.5*self.mass*v**2
+		d = 0
+		a = 0
+		v = v_i
+		self.drivetrain.selectGear(v_i)
         
         # While d is less than the length of the straight minus the distance required to slow down, accelerate
         while(d < length - self.findBrakingDistance(v, v_f)):
-            ke += self.power*self.dt - self.getDrag(v)*(d-d_prev)
-            v = sqrt(2*ke/self.mass)
-            d_prev = d
-            d += v*self.dt
-            t += self.dt
+            self.drivetrain.selectGear(v)
+			
+		  #Velocity Verlet
+			a_prev = a
+			d += v*self.dt + (0.5*a_prev*self.dt**2)
+			
+            # Some calculations to figure out how much throttle to use
+			max_force = self.drivetrain.getWheelForce() - self.getDrag(v) # The most force that the engine can supply minus drag
+			max_traction = self.mu * (self.mass*9.81 + self.getDownforce(v)) # The most friction the tires can supply without slipping
+			throttle_percent = max_traction/max_force # Set the 'throttle' so that the car doesn't spin the tires
+			if throttle_percent > 1: # Don't let throttle_percent go over 1 or under 0
+				throttle_percent = 1
+			elif throttle_percent < 0:
+				throttle_percent = 0
+			
+			a = (max_force * throttle_percent) / self.mass
+			a_avg = (a + a_prev)/2
+			v += a_avg*self.dt
+			t += self.dt
+			
+			#Print stuff for debugging
+			print("Time: " + str(t))
+			print("RPM: " + str(self.drivetrain.rpm) + "\tPower: " + str(self.drivetrain.getPower()) + "\tTorque: " + str(self.drivetrain.getTorque()) + "\tThrottle: " + str(throttle_percent))
+			print("Distance: " + str(d) + "\tVelocity: " + str(v) + "\tAccel: " + str(a_avg) + "\n")
                 
         # The previous loop exited, so now it is time to slow down by subtracting the braking acceleration from velocity
+        #************This needs to be changed (probably dramatically) to switch to a force based model
         while(d<length):
             v -= self.a_brake*self.dt
             d += v*self.dt
@@ -168,7 +274,9 @@ class Car:
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~VARIABLE SETUP~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-power = 23390 # Watts
+#power = 23390 # Watts
+R62006_curve = [[4125.0, 18642.0], [10000.0, 49216.0]]
+drivetrain17 = Drivetrain(R62006_curve, [2.583, 2.0, 1.67, 1.444, 1.286, 1.150], 42.0/13.0, 0.2286)
 m_car = 234.0 # kg
 m_driver = 75.0 # kg
 m_aeroPackage = 12 # kg
@@ -190,39 +298,43 @@ endurance_track = readTrackFile("C:\\Users\\MMcMu\\OneDrive\\Documents\\_School\
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~TESTING~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Mantis17 is the old car
+Mantis17 = Car("Mantis 17", m_car+m_driver, drivetrain17, mu_s, width_car, a_brake17, df17, drag17)
+
+print(Mantis17.findStraightTime(6, -1, 75)) # Acceleration event time
+
 # Mantis18 is the old car + aero. 
 # Mantis18a is Mantis18 - 16 kg (so we are average weight w/o aero), + 2147 W from new exhaust
-Mantis17 = Car("Mantis 17", m_car+m_driver, power, mu_s, width_car, a_brake17, df17, drag17)
-Mantis18 = Car("Mantis 18", m_car+m_driver+m_aeroPackage, power, mu_s, width_car, a_brake18, df18, drag18)
-Mantis18a = Car("Mantis 18a", m_car+m_driver+m_aeroPackage-16, power+2147, mu_s, width_car, a_brake18, df18, drag18)
+#Mantis17 = Car("Mantis 17", m_car+m_driver, power, mu_s, width_car, a_brake17, df17, drag17)
+#Mantis18 = Car("Mantis 18", m_car+m_driver+m_aeroPackage, power, mu_s, width_car, a_brake18, df18, drag18)
+#Mantis18a = Car("Mantis 18a", m_car+m_driver+m_aeroPackage-16, power+2147, mu_s, width_car, a_brake18, df18, drag18)
 
 # Finding dynamic event times for all of the cars
-m17 = Mantis17.findDynamicTimes(True, autox_track, endurance_track)
-m18 = Mantis18.findDynamicTimes(True, autox_track, endurance_track)
-m18a = Mantis18a.findDynamicTimes(True, autox_track, endurance_track)
+#m17 = Mantis17.findDynamicTimes(True, autox_track, endurance_track)
+#m18 = Mantis18.findDynamicTimes(True, autox_track, endurance_track)
+#m18a = Mantis18a.findDynamicTimes(True, autox_track, endurance_track)
 
-events = ['acceleration', 'skidpad', 'autocross', 'endurance']
+#events = ['acceleration', 'skidpad', 'autocross', 'endurance']
 
 # Print differences between 2017 and 2018 cars
-for event in range(len(m17)):
-    diff = m17[event]-m18[event]
-    percent = diff/m17[event]*100
-    print(str(round(percent,2)) + '% difference from 2017 to 2018 in ' + events[event])
-print()
+#for event in range(len(m17)):
+#    diff = m17[event]-m18[event]
+#    percent = diff/m17[event]*100
+#    print(str(round(percent,2)) + '% difference from 2017 to 2018 in ' + events[event])
+#print()
 
 # Print differences between 2017 and 2018a cars
-for event in range(len(m17)):
-    diff = m17[event]-m18a[event]
-    percent = diff/m17[event]*100
-    print(str(round(percent,2)) + '% difference from 2017 to 2018a in ' + events[event])
+#for event in range(len(m17)):
+#    diff = m17[event]-m18a[event]
+#    percent = diff/m17[event]*100
+#    print(str(round(percent,2)) + '% difference from 2017 to 2018a in ' + events[event])
     
 # Calculating the accuracy of the model
-model_accuracy = 0
-irl_times = [4.452, 5.252, 57.268, 1485.083]
-for event in range(len(m17)):
-    print(str(round(abs((m17[event]-irl_times[event])/irl_times[event]*100),2)) + '% difference from irl to model in ' + events[event] + '\n')
-    
-    model_accuracy += abs((m17[event]-irl_times[event])/m17[event]*100)
+#model_accuracy = 0
+#irl_times = [4.452, 5.252, 57.268, 1485.083]
+#for event in range(len(m17)):
+#    print(str(round(abs((m17[event]-irl_times[event])/irl_times[event]*100),2)) + '% difference from irl to model in ' + events[event] + '\n')
+#    
+#    model_accuracy += abs((m17[event]-irl_times[event])/m17[event]*100)
 
-model_accuracy /= 4
-print('\nModel is ' + str(model_accuracy)[:4] + '% inaccurate on average across the four events')   
+#model_accuracy /= 4
+#print('\nModel is ' + str(model_accuracy)[:4] + '% inaccurate on average across the four events')   
