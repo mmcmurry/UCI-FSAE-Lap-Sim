@@ -292,8 +292,8 @@ drag17 = [0.402, -0.0397, -7.5821]
 skidpad_track = [[8.12, 360, 0]]
 
 #!!! Change these paths to match the paths to the track files on your computer
-autox_track = readTrackFile("C:\\Users\\MMcMu\\OneDrive\\Documents\\_School\\_FSAE\\2017 autocross map.txt")
-endurance_track = readTrackFile("C:\\Users\\MMcMu\\OneDrive\\Documents\\_School\\_FSAE\\2017 endurance map.txt")
+#autox_track = readTrackFile("C:\\Users\\MMcMu\\OneDrive\\Documents\\_School\\_FSAE\\2017 autocross map.txt")
+#endurance_track = readTrackFile("C:\\Users\\MMcMu\\OneDrive\\Documents\\_School\\_FSAE\\2017 endurance map.txt")
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~TESTING~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
