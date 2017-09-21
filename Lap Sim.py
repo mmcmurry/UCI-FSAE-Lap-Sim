@@ -1,8 +1,9 @@
 from math import sqrt, pi
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~TO-DO~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# - Make braking more realistic using forces rather than constant acceleration
-# - Add power curve, gears
+# - Make acceleration from a standstill more realistic by including some form of a clutch. The car initially accelerates very slowly at
+#   first because it is at the minimum rpm, where power is very low. When starting irl, you rev the engine up for more power and then 
+#   use the clutch to control how much of that power you deliver to the wheels.
 
 # Some general methods used in the Car class and in setting up testing
 def quadraticFormula(a,b,c):
@@ -66,9 +67,7 @@ class Drivetrain:
 	
 	def setRPM(self, velocity):
 	# Given velocity, find RPM based on gearing. Haven't been able to get this to put out realistic numbers
-		#self.rpm = self.crank_sprocket_ratio * self.gear_ratios[self.gear-1] * velocity * (60/(2*pi)) / self.tire_radius
-		#self.rpm = (velocity*self.gear_ratios[self.gear-1]*self.crank_sprocket_ratio)/(2*pi*self.tire_radius)*60 #shelquist
-		self.rpm = 60/2/pi*(velocity*self.gear_ratios[self.gear-1]*self.crank_sprocket_ratio)/self.tire_radius #crawlpedia
+		self.rpm = velocity/self.tire_radius * self.gear_ratios[self.gear-1] * self.crank_sprocket_ratio * 60 / (2*pi)
 		if self.rpm < self.min_rpm and self.gear == 1: # Don't let the engine 'stall'
 			self.rpm = self.min_rpm
 		
@@ -104,7 +103,7 @@ class Drivetrain:
 		power = 0
 		for i in range(len(self.power_curve)-1):
 			if self.rpm >= self.power_curve[i][0] and self.rpm < self.power_curve[i+1][0]:
-				power = self.power_curve[i][2] * (self.power_curve[i][0] - self.rpm) + self.power_curve[i][1]
+				power = self.power_curve[i][2] * (self.rpm - self.power_curve[i][0]) + self.power_curve[i][1]
 			
 		return power
 	
@@ -190,11 +189,11 @@ class Car:
         while(d < length - self.findBrakingDistance(v, v_f)):
             self.drivetrain.selectGear(v)
 			
-		  #Velocity Verlet
+		#Velocity Verlet
 			a_prev = a
 			d += v*self.dt + (0.5*a_prev*self.dt**2)
 			
-            # Some calculations to figure out how much throttle to use
+            	# Some calculations to figure out how much throttle to use
 			max_force = self.drivetrain.getWheelForce() - self.getDrag(v) # The most force that the engine can supply minus drag
 			max_traction = self.mu * (self.mass*9.81 + self.getDownforce(v)) # The most friction the tires can supply without slipping
 			throttle_percent = max_traction/max_force # Set the 'throttle' so that the car doesn't spin the tires
@@ -300,7 +299,7 @@ skidpad_track = [[8.12, 360, 0]]
 # Mantis17 is the old car
 Mantis17 = Car("Mantis 17", m_car+m_driver, drivetrain17, mu_s, width_car, a_brake17, df17, drag17)
 
-print(Mantis17.findStraightTime(6, -1, 75)) # Acceleration event time
+print(Mantis17.findStraightTime(0, -1, 75)) # Acceleration event time
 
 # Mantis18 is the old car + aero. 
 # Mantis18a is Mantis18 - 16 kg (so we are average weight w/o aero), + 2147 W from new exhaust
