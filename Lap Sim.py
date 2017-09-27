@@ -1,5 +1,6 @@
 from math import sqrt, pi
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~Version 1.0~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~TO-DO~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # - Make braking more realistic using forces rather than constant acceleration
 # - Change Euler integration to RK4
