@@ -41,29 +41,20 @@ class Car:
         self.power = P # Average power of the engine, calculated using acceleration event times, in Watts
         self.mu = mu # Coefficient of static friction
         self.a_brake = a_brake # Longitudinal acceleration under peak braking
-        self.df = df # A length 3 array with quadratic coefficients
-        self.df += findVertex(df[0],df[1],df[2])[::-1]
-        self.drag = drag # Same as self.df ... [a, b, c]
-        self.drag += findVertex(drag[0],drag[1],drag[2])[::-1]
+		self.cl = cl # Coefficient of lift
+		self.cd = cd # Coefficient of drag
+		self.f_area = f_area # Frontal area of car 
+		self.rho = 1.225 # Air density in kg/m^3
         self.width = width # Width of the car in meters
         self.dt = 0.001        
     
     def getDownforce(self, velocity):
-        # Returns downforce amount (positive) in Newtons given a velocity using a linear/quadratic model of downforce
-        # If v is higher than vertex of downforce parabola, use quadratic model of downforce. Otherwise use linear
-        if (velocity >= self.df[4]):
-            return self.df[0]*velocity**2 + self.df[1]*velocity + self.df[2]
-        # If v is lower than the apex, use the linear model
-        else:
-            return velocity*self.df[3]/self.df[4]
+		# Returns Newtons of downforce as a positive number
+		return 0.5 * self.cl * self.f_area * self.rho * velocity**2 
 
-    def getDrag(self, velocity):
-        # Returns drag force (positive) in Newtons given a velocity using a linear/quadratic model of drag
-        # Basically identical to Car.getDownforce()
-        if (velocity >= self.drag[4]):
-            return self.drag[0]*velocity**2 - self.drag[1]*velocity + self.drag[2]
-        else:
-            return velocity*self.drag[3]/self.drag[4]
+	def getDrag(self, velocity):
+		# Returns Newtons of drag as a positive number
+		return 0.5 * self.cd * self.f_area * self.rho * velocity**2
     
     def findCorneringSpeed(self, radius):
         # Returns the maximum speed in meters per second that the car could go through a corner of given radius
@@ -71,19 +62,13 @@ class Car:
 
         radius = radius + 0.5*self.width
         
-        a = self.mass/radius - self.mu*self.df[0]
-        b = self.mu*self.df[1]
-        c = -1*self.mu*(self.mass*9.81 + self.df[2])
-        
-        v = max(quadraticFormula(a,b,c))
-
-        if v > self.df[4]:
-            return v
-        else:
-            a = 1
-            b = -radius/self.mass * self.mu * self.df[3]/self.df[4]
-            c = -radius * self.mass * self.mu * 9.81
-            return max(quadraticFormula(a,b,c))
+        combined_cl = 0.5 * self.cl * self.f_area * self.rho
+		a = self.mass/radius - self.mu * combined_cl
+		b = 0
+		c = -1 * self.mu * self.mass * 9.81
+		
+		v = max(quadraticFormula(a,b,c))
+		return v
 
     def findCorneringTime(self, radius, theta):
         # Returns time to go through a corner in seconds given the radius of the turn in meters and the angle of the turn
@@ -177,25 +162,24 @@ width_car = 1.2192 # m
 mu_s = 1.31985
 a_brake17 = 1.2 * 9.81 # m/s^2
 a_brake18 = 1.3 * 9.81 # m/s^2
-df18 = [0.2852, -3.3168, 25.136]
-drag18 = [0.8715, -11.845, 42.783]
-df17 = [-0.2951, 5.9005, -12.486, 0, 0]
-drag17 = [0.402, -0.0397, -7.5821]
+clift = 2.961
+cdrag = 1.974
+farea = 1
 
 skidpad_track = [[8.12, 360, 0]]
 
 #!!! Change these paths to match the paths to the track files on your computer
-autox_track = readTrackFile("C:\\Users\\MMcMu\\OneDrive\\Documents\\_School\\_FSAE\\2017 autocross map.txt")
-endurance_track = readTrackFile("C:\\Users\\MMcMu\\OneDrive\\Documents\\_School\\_FSAE\\2017 endurance map.txt")
+autox_track = readTrackFile("C:\\Users\\matt\\OneDrive\\Documents\\_School\\_FSAE\\2017 autocross map.txt")
+endurance_track = readTrackFile("C:\\Users\\matt\\OneDrive\\Documents\\_School\\_FSAE\\2017 endurance map.txt")
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~TESTING~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Mantis17 is the old car
 # Mantis18 is the old car + aero. 
 # Mantis18a is Mantis18 - 16 kg (so we are average weight w/o aero), + 2147 W from new exhaust
-Mantis17 = Car("Mantis 17", m_car+m_driver, power, mu_s, width_car, a_brake17, df17, drag17)
-Mantis18 = Car("Mantis 18", m_car+m_driver+m_aeroPackage, power, mu_s, width_car, a_brake18, df18, drag18)
-Mantis18a = Car("Mantis 18a", m_car+m_driver+m_aeroPackage-16, power+2147, mu_s, width_car, a_brake18, df18, drag18)
+Mantis17 = Car("Mantis 17", m_car+m_driver, power, mu_s, width_car, a_brake17, clift, cdrag, farea)
+Mantis18 = Car("Mantis 18", m_car+m_driver+m_aeroPackage, power, mu_s, width_car, a_brake18, clift, cdrag, farea)
+Mantis18a = Car("Mantis 18a", m_car+m_driver+m_aeroPackage-16, power+2147, mu_s, width_car, a_brake18, clift, cdrag, farea)
 
 # Finding dynamic event times for all of the cars
 m17 = Mantis17.findDynamicTimes(True, autox_track, endurance_track)
